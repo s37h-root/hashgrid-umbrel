@@ -1,0 +1,12 @@
+version: "3.7"
+
+services:
+  app:
+    build: .
+    network_mode: host
+    restart: on-failure
+    volumes:
+      - ${APP_DATA_DIR:-./data}:/data
+    environment:
+      - DATA_DIR=/data
+      - PORT=3000

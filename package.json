@@ -1,0 +1,18 @@
+{
+  "name": "hashgrid-bridge-umbrel",
+  "version": "1.0.0",
+  "description": "HashGrid Bridge for Umbrel — remote miner monitoring",
+  "main": "bridge/index.js",
+  "scripts": {
+    "start": "node bridge/index.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
