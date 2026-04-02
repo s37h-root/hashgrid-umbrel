@@ -44,12 +44,14 @@ function sendCGMinerCommand(ip, command) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
     let data = '';
+    let settled = false;
     socket.setTimeout(CGMINER_TIMEOUT_MS);
     socket.connect(CGMINER_PORT, ip, () => { socket.write(JSON.stringify(command) + '\n'); });
     socket.on('data', (chunk) => { data += chunk.toString(); });
-    socket.on('end', () => { socket.destroy(); resolve(data.replace(/\0+$/, '')); });
-    socket.on('error', (err) => { socket.destroy(); reject(err); });
-    socket.on('timeout', () => { socket.destroy(); reject(new Error('timeout')); });
+    socket.on('end', () => { if (settled) return; settled = true; socket.destroy(); resolve(data.replace(/\0+$/, '')); });
+    socket.on('close', () => { if (settled) return; settled = true; resolve(data.replace(/\0+$/, '')); });
+    socket.on('error', (err) => { if (settled) return; settled = true; socket.destroy(); reject(err); });
+    socket.on('timeout', () => { if (settled) return; settled = true; socket.destroy(); reject(new Error('timeout')); });
   });
 }
 

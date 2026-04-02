@@ -14,6 +14,10 @@
   const subnetSave = document.getElementById('subnet-save');
   const regenerateBtn = document.getElementById('regenerate-btn');
 
+  function escapeHTML(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   const STATE_LABELS = {
     disconnected: 'Disconnected',
     connecting: 'Connecting...',
@@ -58,14 +62,14 @@
 
       minerCount.textContent = miners.length;
       if (miners.length === 0) {
-        minersList.innerHTML = '<div class="empty-state">No miners found on ' + (status.subnet || 'network') + '</div>';
+        minersList.innerHTML = '<div class="empty-state">No miners found on ' + escapeHTML(status.subnet || 'network') + '</div>';
       } else {
         minersList.innerHTML = miners
           .map(function (m) {
             return (
               '<div class="miner-item">' +
-              '<div><div class="miner-ip">' + m.ip + '</div>' +
-              '<div class="miner-model">' + (m.deviceModel || 'Unknown') + '</div></div>' +
+              '<div><div class="miner-ip">' + escapeHTML(m.ip) + '</div>' +
+              '<div class="miner-model">' + escapeHTML(m.deviceModel || 'Unknown') + '</div></div>' +
               '<span class="miner-protocol">' + (m.minerProtocol === 'bitaxeHTTP' ? 'BitAxe' : 'CGMiner') + '</span>' +
               '</div>'
             );

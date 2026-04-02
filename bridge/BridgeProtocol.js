@@ -20,6 +20,7 @@ const RequestType = {
 const MinerProtocolType = {
   BITAXE_HTTP: 'bitaxeHTTP',
   CGMINER_TCP: 'cgminerTCP',
+  ANTMINER_CGI: 'antminerCGI',
 };
 
 function createEnvelope(type, payloadBuffer) {
