@@ -33,6 +33,26 @@ function createServer(bridgeManager) {
     res.json({ code: bridgeManager.code });
   });
 
+  // Umbrel dashboard widget endpoint
+  app.get('/api/widget', (req, res) => {
+    const stateLabels = {
+      disconnected: 'Offline',
+      connecting: 'Connecting',
+      waitingForPeer: 'Waiting',
+      connected: 'Connected',
+      error: 'Error',
+    };
+    res.json({
+      type: 'four-stats',
+      items: [
+        { title: 'Pairing Code', text: bridgeManager.code || '--------', subtext: '' },
+        { title: 'Relay', text: stateLabels[bridgeManager.state] || bridgeManager.state, subtext: '' },
+        { title: 'Miners', text: String(bridgeManager.scanner.miners.length), subtext: 'found' },
+        { title: 'Peer', text: bridgeManager.peerConnected ? 'Online' : 'Offline', subtext: '' },
+      ],
+    });
+  });
+
   app.get('/api/settings', (req, res) => {
     const { loadSettings } = require('./persistence');
     res.json(loadSettings());
