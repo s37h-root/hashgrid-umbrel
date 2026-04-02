@@ -15,12 +15,12 @@ description: >-
   no port forwarding or VPN required.
 developer: HashGrid
 website: https://hashgrid.app
-repo: https://github.com/nickthedude/hashgrid-umbrel
-support: https://github.com/nickthedude/hashgrid-umbrel/issues
+repo: https://github.com/s37h-root/hashgrid-umbrel
+support: https://github.com/s37h-root/hashgrid-umbrel/issues
 port: 3000
 dependencies: []
 gallery:
   - 1.jpg
   - 2.jpg
 releaseNotes: "Initial release"
-submitter: nickthedude
+submitter: s37h-root

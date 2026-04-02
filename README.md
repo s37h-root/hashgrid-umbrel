@@ -15,7 +15,7 @@ Remote miner monitoring bridge for the [HashGrid](https://hashgrid.app) iOS app.
 
 1. Open your Umbrel dashboard
 2. Go to **App Store** > **Community App Stores**
-3. Add this store URL: `https://github.com/nickthedude/hashgrid-umbrel`
+3. Add this store URL: `https://github.com/s37h-root/hashgrid-umbrel`
 4. Install **HashGrid Bridge**
 
 ### Manual (Docker)
