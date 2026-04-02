@@ -43,6 +43,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         type: 'four-stats',
+        refresh: '30s',
+        link: '',
         items: [
           { title: 'Pairing Code', text: code.code || '--------', subtext: '' },
           { title: 'Relay', text: STATE_LABELS[status.state] || status.state, subtext: '' },
@@ -54,6 +56,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         type: 'four-stats',
+        refresh: '30s',
+        link: '',
         items: [
           { title: 'Pairing Code', text: '--', subtext: '' },
           { title: 'Relay', text: '--', subtext: '' },
