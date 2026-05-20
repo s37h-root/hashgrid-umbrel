@@ -16,7 +16,7 @@ const CGMINER_PORT = 4028;
 const CGMINER_TIMEOUT_MS = 3_000;
 const BITAXE_STATUS_TIMEOUT_MS = 5_000;
 const ANTMINER_TIMEOUT_MS = 10_000;
-const BRIDGE_VERSION = '1.0.3';
+const BRIDGE_VERSION = '1.0.4';
 const BRIDGE_PLATFORM = 'umbrel';
 
 // Parse a target string into [host, port]. iOS sends "192.168.1.50:4029"
@@ -35,28 +35,37 @@ function splitHostPort(target, defaultPort) {
   return [target, defaultPort];
 }
 
-// Legacy single-command builder retained for tests + the simple actions
-// that still map 1:1 to a cgminer command. LED + pool actions fan out
-// via dedicated functions below.
+// Build the wire payload for a single-shot cgminer action. Nano 3S firmware
+// requires the RAW pipe form (`ascset|0,X,Y`) for ascset commands — the
+// JSON-wrapped form the bridge used pre-v1.0.4 was rejected silently. Every
+// action here now mirrors the exact LAN wire format from CGMinerClient.swift.
 function buildCGMinerCommand(action, params) {
   switch (action) {
     case 'reboot':
-      return { command: 'ascset', parameter: '0,reboot,1' };
+      // LAN: ascset|0,reboot,0 (Nano 3S/Q). The trailing 0 is the module id;
+      // 1 worked on some firmware but 0 matches the LAN client.
+      return 'ascset|0,reboot,0';
     case 'restart':
+      // No ascset — standard cgminer restart command. JSON-wrap is fine.
       return { command: 'restart' };
     case 'softoff': {
       const epoch = params.epoch || String(Math.floor(Date.now() / 1000) + 10);
-      return { command: 'ascset', parameter: `0,softoff,1:${epoch}` };
+      // LAN: ascset|0,softoff,1:<epoch>
+      return `ascset|0,softoff,1:${epoch}`;
     }
     case 'softon': {
       const epoch = params.epoch || String(Math.floor(Date.now() / 1000) + 10);
-      return { command: 'ascset', parameter: `0,softon,1:${epoch}` };
+      // LAN: ascset|0,softon,1:<epoch>
+      return `ascset|0,softon,1:${epoch}`;
     }
     case 'setFrequency':
-      return { command: 'ascset', parameter: `0,freq,${params.mhz}` };
+      // LAN: ascset|0,frequency,<mhz>. The shorthand `freq` keyword was wrong.
+      return `ascset|0,frequency,${params.mhz}`;
     case 'setWorkMode':
-      return { command: 'ascset', parameter: `0,workmode,${params.mode}` };
+      // LAN: ascset|0,workmode,set,<mode> — the `set,` keyword is required.
+      return `ascset|0,workmode,set,${params.mode}`;
     case 'switchPool':
+      // Standard cgminer switchpool — JSON-wrap is fine, no pipe needed.
       return { command: 'switchpool', parameter: String(params.poolIndex || '0') };
     default:
       return { command: action };
