@@ -16,7 +16,7 @@ const CGMINER_PORT = 4028;
 const CGMINER_TIMEOUT_MS = 3_000;
 const BITAXE_STATUS_TIMEOUT_MS = 5_000;
 const ANTMINER_TIMEOUT_MS = 10_000;
-const BRIDGE_VERSION = '1.0.0';
+const BRIDGE_VERSION = '1.0.2';
 const BRIDGE_PLATFORM = 'umbrel';
 
 // Parse a target string into [host, port]. iOS sends "192.168.1.50:4029"
