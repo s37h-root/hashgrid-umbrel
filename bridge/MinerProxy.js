@@ -16,7 +16,7 @@ const CGMINER_PORT = 4028;
 const CGMINER_TIMEOUT_MS = 3_000;
 const BITAXE_STATUS_TIMEOUT_MS = 5_000;
 const ANTMINER_TIMEOUT_MS = 10_000;
-const BRIDGE_VERSION = '1.0.2';
+const BRIDGE_VERSION = '1.0.3';
 const BRIDGE_PLATFORM = 'umbrel';
 
 // Parse a target string into [host, port]. iOS sends "192.168.1.50:4029"
@@ -359,8 +359,16 @@ function sendBitAxeAction(target, action, params) {
   return new Promise((resolve, reject) => {
     const [host, port] = splitHostPort(target, 80);
     const postData = JSON.stringify(params || {});
+    // BitAxe uses PATCH /api/system for settings updates (the params dict is
+    // the body — fields like stratumURL, stratumUser, fanspeed, etc) and
+    // POST /api/system/<action> for everything else (restart). The prior
+    // shape did POST /api/system/settings universally, which BitAxe firmware
+    // rejects with 404. iOS-side LAN goes through networkManager.patchSystemSettings.
+    const isSettings = action === 'settings';
     const req = http.request({
-      hostname: host, port, path: `/api/system/${action}`, method: 'POST',
+      hostname: host, port,
+      path: isSettings ? '/api/system' : `/api/system/${action}`,
+      method: isSettings ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
       timeout: CGMINER_TIMEOUT_MS,
     }, (res) => {
