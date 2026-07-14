@@ -2,7 +2,7 @@ manifestVersion: 1
 id: hashgrid-bridge
 category: bitcoin
 name: HashGrid Bridge
-version: "1.0.0"
+version: "1.0.5"
 tagline: Remote miner monitoring bridge for the HashGrid iOS app
 description: >-
   HashGrid Bridge connects your local Bitcoin miners to the HashGrid iOS app
@@ -22,5 +22,9 @@ dependencies: []
 gallery:
   - 1.jpg
   - 2.jpg
-releaseNotes: "Initial release"
+releaseNotes: >-
+  Security hardening: persistent bridge identity (verify the 48-bit fingerprint
+  in the app), app-key pinning so only your paired phone can connect, replay/
+  freshness protection, SSRF target allowlisting, and a real unpair. Requires
+  HashGrid app v2+ for remote actions.
 submitter: s37h-root

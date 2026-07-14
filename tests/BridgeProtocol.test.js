@@ -65,10 +65,12 @@ describe('BridgeProtocol', () => {
       uptime: 120.5,
       minerCount: 3,
       hostname: 'umbrel.local',
+      minAppVersion: 2,
     });
     assert.equal(resp.data.type, 'bridgeInfo');
     assert.equal(resp.data.value.platform, 'umbrel');
     assert.equal(resp.data.value.minerCount, 3);
+    assert.equal(resp.data.value.minAppVersion, 2);
   });
 
   it('creates an error response', () => {

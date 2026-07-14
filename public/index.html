@@ -10,7 +10,7 @@
   <div class="container">
     <header>
       <h1>HashGrid Bridge</h1>
-      <span class="version">v1.0.4</span>
+      <span class="version">v1.0.5</span>
     </header>
 
     <section class="code-section">
@@ -24,7 +24,10 @@
           </svg>
         </button>
       </div>
+      <label class="fingerprint-label">Bridge Identity (verify in app)</label>
       <div class="fingerprint" id="fingerprint"></div>
+      <div class="pairing-banner" id="pairing-banner" hidden></div>
+      <div class="warning-banner" id="unknown-banner" hidden></div>
     </section>
 
     <section class="status-section">
@@ -57,6 +60,7 @@
     </section>
 
     <div class="actions">
+      <button id="pair-btn" class="btn-secondary">Pair New Device</button>
       <button id="regenerate-btn" class="btn-secondary">Regenerate Code</button>
     </div>
   </div>

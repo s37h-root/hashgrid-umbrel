@@ -7,6 +7,9 @@ const { EnvelopeType, createEnvelope, parseEnvelope } = require('./BridgeProtoco
 const RELAY_URL = 'wss://hashgrid-relay.root373.workers.dev';
 const PING_INTERVAL_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+// Explicit inbound frame cap so a hostile relay can't OOM the bridge with one
+// giant frame. Matches the mac/Windows bridges (10 MiB).
+const MAX_FRAME_BYTES = 10 * 1024 * 1024;
 
 const PAIRING_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -31,6 +34,8 @@ class RelayClient {
   constructor(code, callbacks) {
     this.code = code;
     this.callbacks = callbacks;
+    // Persistent Ed25519 identity used to sign the ephemeral key each exchange.
+    this.identity = callbacks.identity;
     this.state = ConnectionState.DISCONNECTED;
     this.ws = null;
     this.keyPair = crypto.generateKeyPair();
@@ -49,7 +54,7 @@ class RelayClient {
     if (this._closed) return;
     this._setState(ConnectionState.CONNECTING);
     const url = `${RELAY_URL}/room/${this.code}?role=bridge`;
-    this.ws = new WebSocket(url);
+    this.ws = new WebSocket(url, { maxPayload: MAX_FRAME_BYTES });
 
     this.ws.on('open', () => {
       this._reconnectAttempt = 0;
@@ -107,21 +112,42 @@ class RelayClient {
     }
   }
 
-  _handleKeyExchange(payloadBase64) {
+  async _handleKeyExchange(payloadBase64) {
     try {
       const pairingJSON = Buffer.from(payloadBase64, 'base64').toString();
       const pairing = JSON.parse(pairingJSON);
       if (!pairing.publicKey) return;
 
-      this.peerPublicKey = Buffer.from(pairing.publicKey, 'base64');
+      const appPublicKey = Buffer.from(pairing.publicKey, 'base64');
+
+      // App-key binding: validate BEFORE mutating any session state. A rejected
+      // exchange MUST NOT clobber the live sharedKey/peerPublicKey and gets no
+      // reply (no re-key, no oracle for an attacker holding the old code).
+      const accepted = this.callbacks.shouldAcceptKey
+        ? await this.callbacks.shouldAcceptKey(appPublicKey)
+        : true;
+      if (!accepted) {
+        console.warn('[RelayClient] Rejected key exchange from unknown app key — session state untouched');
+        return;
+      }
+
+      this.peerPublicKey = appPublicKey;
       this.sharedKey = crypto.deriveSharedKey(this.keyPair.secretKey, this.peerPublicKey);
 
+      // `fingerprint` stays the legacy 3-group EPHEMERAL value (old apps check
+      // it for exact equality). New apps verify identitySignature over the raw
+      // ephemeral public key bytes and pin identityKey (raw 32-byte Ed25519).
+      const ephemeralPub = Buffer.from(this.keyPair.publicKey);
       const ourPairing = {
         type: 'keyExchange',
-        publicKey: Buffer.from(this.keyPair.publicKey).toString('base64'),
+        publicKey: ephemeralPub.toString('base64'),
         fingerprint: this.fingerprint,
         deviceName: require('node:os').hostname(),
       };
+      if (this.identity) {
+        ourPairing.identityKey = this.identity.publicKeyRaw.toString('base64');
+        ourPairing.identitySignature = this.identity.sign(ephemeralPub).toString('base64');
+      }
       const envelope = createEnvelope(EnvelopeType.PUBLIC_KEY, Buffer.from(JSON.stringify(ourPairing)));
       this.ws.send(JSON.stringify(envelope));
 
@@ -132,14 +158,26 @@ class RelayClient {
     } catch (err) { console.error('[RelayClient] Key exchange error:', err.message); }
   }
 
-  _handleEncrypted(payloadBase64) {
+  async _handleEncrypted(payloadBase64) {
     if (!this.sharedKey) return;
+    let request;
     try {
       const encrypted = Buffer.from(payloadBase64, 'base64');
       const decrypted = crypto.decrypt(encrypted, this.sharedKey);
-      const request = JSON.parse(decrypted.toString());
-      if (this.callbacks.onRequest) this.callbacks.onRequest(request);
-    } catch (err) { console.error('[RelayClient] Decrypt/parse error:', err.message); }
+      request = JSON.parse(decrypted.toString());
+    } catch (err) {
+      // Undecodable frame — no id to respond to, so just drop it.
+      console.error('[RelayClient] Decrypt/parse error:', err.message);
+      return;
+    }
+    if (!this.callbacks.onRequest) return;
+    const response = await this.callbacks.onRequest(request);
+    this.sendResponse(response);
+    // Unpair teardown runs only AFTER the success response is out, so the app
+    // actually sees the acknowledgment before the room is rotated.
+    if (request.type === 'unpair' && response && response.success && this.callbacks.onUnpaired) {
+      this.callbacks.onUnpaired();
+    }
   }
 
   _sendPong() {

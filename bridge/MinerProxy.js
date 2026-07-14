@@ -16,8 +16,92 @@ const CGMINER_PORT = 4028;
 const CGMINER_TIMEOUT_MS = 3_000;
 const BITAXE_STATUS_TIMEOUT_MS = 5_000;
 const ANTMINER_TIMEOUT_MS = 10_000;
-const BRIDGE_VERSION = '1.0.4';
+const BRIDGE_VERSION = '1.0.5';
 const BRIDGE_PLATFORM = 'umbrel';
+// App compatibility version the bridge requires (advertised in bridgeInfo).
+// Legacy apps that can't send `issuedAt` get told to update via this gate.
+const MIN_APP_VERSION = 2;
+
+// Replay/freshness (spec §2).
+const SEEN_ID_TTL_MS = 600_000;   // 10 min
+const SEEN_ID_MAX = 2_000;
+const ACTION_FRESHNESS_SEC = 120; // clock-skew tolerance for minerAction
+
+// SSRF structural allowlist (spec §3 Layer A).
+const ALLOWED_PORTS = new Set([80, 443, 4028, 4029]);
+
+// Layer A — structural target validation, always on. `target` must be an IPv4
+// literal (optionally `:port`) in an RFC-1918 private range, port restricted to
+// known miner ports. Rejects DNS names (an internet-SSRF primitive), loopback,
+// link-local (cloud metadata), public IPs, paths, `@`, and whitespace. Returns
+// { host, port|null } or throws.
+function validateTarget(target) {
+  if (typeof target !== 'string' || target.length === 0) throw new Error('Invalid miner target');
+  // Only ASCII digits, dots and one port separator are ever legitimate — this
+  // rejects `/`, `?`, `#`, `@`, whitespace and hostnames outright.
+  if (!/^[0-9.:]+$/.test(target)) throw new Error('Invalid miner target');
+
+  const pieces = target.split(':');
+  let host;
+  let port = null;
+  if (pieces.length === 1) {
+    host = pieces[0];
+  } else if (pieces.length === 2) {
+    host = pieces[0];
+    const p = Number(pieces[1]);
+    if (!Number.isInteger(p) || !ALLOWED_PORTS.has(p)) throw new Error('Invalid miner target');
+    port = p;
+  } else {
+    throw new Error('Invalid miner target');
+  }
+
+  const octets = parseIPv4(host);
+  if (!octets || !isPrivateIPv4(octets)) throw new Error('Invalid miner target');
+  return { host, port };
+}
+
+function parseIPv4(s) {
+  const parts = s.split('.');
+  if (parts.length !== 4) return null;
+  const octets = [];
+  for (const part of parts) {
+    if (part.length < 1 || part.length > 3 || !/^[0-9]+$/.test(part)) return null;
+    const v = Number(part);
+    if (v > 255) return null;
+    octets.push(v);
+  }
+  return octets;
+}
+
+// RFC 1918 only: 10/8, 172.16/12, 192.168/16. Everything else — loopback 127/8,
+// link-local 169.254/16, 0.0.0.0, multicast, public — is rejected.
+function isPrivateIPv4(o) {
+  if (o[0] === 10) return true;
+  if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+  if (o[0] === 192 && o[1] === 168) return true;
+  return false;
+}
+
+// Layer D — free-form values interpolated into cgminer command text (pool url,
+// worker, password, auth credentials) must not be able to inject extra fields
+// or commands: reject `,` `|` `"` `\` and control characters.
+function validateFreeform(value, name) {
+  const s = String(value);
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 0x2c /*,*/ || c === 0x7c /*|*/ || c === 0x22 /*"*/ || c === 0x5c /*\\*/ || c < 0x20 || c === 0x7f) {
+      throw new Error(`Invalid value for parameter '${name}'`);
+    }
+  }
+  return s;
+}
+
+// Numeric params (Layer D): must parse as an integer, else reject.
+function requireInt(value, name) {
+  const n = Number(value);
+  if (!Number.isInteger(n)) throw new Error(`Invalid value for parameter '${name}'`);
+  return n;
+}
 
 // Parse a target string into [host, port]. iOS sends "192.168.1.50:4029"
 // for cgminer devices on non-default ports (e.g. Avalon Nano 3S in
@@ -49,24 +133,25 @@ function buildCGMinerCommand(action, params) {
       // No ascset — standard cgminer restart command. JSON-wrap is fine.
       return { command: 'restart' };
     case 'softoff': {
-      const epoch = params.epoch || String(Math.floor(Date.now() / 1000) + 10);
+      // Layer D: epoch is interpolated into the pipe command — must be integer.
+      const epoch = params.epoch !== undefined ? requireInt(params.epoch, 'epoch') : Math.floor(Date.now() / 1000) + 10;
       // LAN: ascset|0,softoff,1:<epoch>
       return `ascset|0,softoff,1:${epoch}`;
     }
     case 'softon': {
-      const epoch = params.epoch || String(Math.floor(Date.now() / 1000) + 10);
+      const epoch = params.epoch !== undefined ? requireInt(params.epoch, 'epoch') : Math.floor(Date.now() / 1000) + 10;
       // LAN: ascset|0,softon,1:<epoch>
       return `ascset|0,softon,1:${epoch}`;
     }
     case 'setFrequency':
       // LAN: ascset|0,frequency,<mhz>. The shorthand `freq` keyword was wrong.
-      return `ascset|0,frequency,${params.mhz}`;
+      return `ascset|0,frequency,${requireInt(params.mhz, 'mhz')}`;
     case 'setWorkMode':
       // LAN: ascset|0,workmode,set,<mode> — the `set,` keyword is required.
-      return `ascset|0,workmode,set,${params.mode}`;
+      return `ascset|0,workmode,set,${requireInt(params.mode, 'mode')}`;
     case 'switchPool':
       // Standard cgminer switchpool — JSON-wrap is fine, no pipe needed.
-      return { command: 'switchpool', parameter: String(params.poolIndex || '0') };
+      return { command: 'switchpool', parameter: String(requireInt(params.poolIndex ?? 0, 'poolIndex')) };
     default:
       return { command: action };
   }
@@ -145,6 +230,13 @@ async function sendLEDColor(target, brightness, red, green, blue, mode, isNano3S
 }
 
 async function sendSetPool(target, poolIndex, url, worker, password, authUser, authPass) {
+  // Layer D: every free-form field is interpolated into the command text, so
+  // reject any value that could inject extra fields (`,` `|` etc.).
+  validateFreeform(url, 'url');
+  validateFreeform(worker, 'worker');
+  validateFreeform(password, 'password');
+  validateFreeform(authUser, 'authUser');
+  validateFreeform(authPass, 'authPass');
   const clamped = clampInt(poolIndex, 0, 2);
   const command = `setpool|${authUser},${authPass},${clamped},${url},${worker},${password}`;
   await sendCGMinerCommand(target, command);
@@ -364,30 +456,63 @@ async function fetchCGMinerStatus(ip) {
   return result;
 }
 
-function sendBitAxeAction(target, action, params) {
+// Layer C — FIXED action map. The action string is NEVER interpolated into the
+// URL path (the old `/api/system/${action}` form was an SSRF path-injection
+// primitive). Unknown actions are rejected. `restart` → POST /api/system/restart;
+// `settings` → PATCH /api/system with a JSON body.
+//
+// For `settings`, new apps send correctly-typed JSON in `bodyBuffer` (forwarded
+// VERBATIM — BitAxe rejects stringified numbers like {"frequency":"605"}). Old
+// apps send `params`; those get serialized with Int-parseable values coerced to
+// JSON numbers as a best-effort legacy path.
+function forwardBitAxeAction(target, action, params, bodyBuffer) {
+  let method;
+  let path;
+  let postData;
+
+  if (action === 'restart') {
+    method = 'POST';
+    path = '/api/system/restart';
+    postData = null;
+  } else if (action === 'settings') {
+    method = 'PATCH';
+    path = '/api/system';
+    if (bodyBuffer && bodyBuffer.length > 0) {
+      postData = bodyBuffer; // verbatim, already correctly-typed JSON
+    } else if (params && Object.keys(params).length > 0) {
+      const object = {};
+      for (const [key, value] of Object.entries(params)) {
+        const n = Number(value);
+        object[key] = (typeof value === 'string' && value.trim() !== '' && Number.isInteger(n)) ? n : value;
+      }
+      postData = Buffer.from(JSON.stringify(object));
+    } else {
+      postData = Buffer.from('{}');
+    }
+  } else {
+    return Promise.reject(new Error(`Unknown action: ${action}`));
+  }
+
   return new Promise((resolve, reject) => {
     const [host, port] = splitHostPort(target, 80);
-    const postData = JSON.stringify(params || {});
-    // BitAxe uses PATCH /api/system for settings updates (the params dict is
-    // the body — fields like stratumURL, stratumUser, fanspeed, etc) and
-    // POST /api/system/<action> for everything else (restart). The prior
-    // shape did POST /api/system/settings universally, which BitAxe firmware
-    // rejects with 404. iOS-side LAN goes through networkManager.patchSystemSettings.
-    const isSettings = action === 'settings';
+    const headers = {};
+    if (postData) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(postData);
+    }
     const req = http.request({
-      hostname: host, port,
-      path: isSettings ? '/api/system' : `/api/system/${action}`,
-      method: isSettings ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
-      timeout: CGMINER_TIMEOUT_MS,
+      hostname: host, port, path, method, headers, timeout: CGMINER_TIMEOUT_MS,
     }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => resolve(body));
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(body);
+        else reject(new Error(`BitAxe HTTP ${res.statusCode}`));
+      });
     });
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-    req.write(postData);
+    if (postData) req.write(postData);
     req.end();
   });
 }
@@ -396,10 +521,32 @@ class MinerProxy {
   constructor(scanner) {
     this.scanner = scanner;
     this.startTime = Date.now();
+    // Replay protection: request id -> firstSeenAt (ms). Insertion order == time
+    // order, so TTL pruning and oldest-eviction both pop from the front.
+    this._seenIDs = new Map();
   }
 
   async handleRequest(request) {
     try {
+      // Freshness (spec §2): mutating actions must carry a recent issuedAt.
+      // Reads (listMiners/minerStatus/bridgeInfo) are idempotent, so legacy
+      // apps without issuedAt keep monitoring.
+      if (request.type === RequestType.MINER_ACTION) {
+        if (request.issuedAt === undefined || request.issuedAt === null) {
+          return createResponse(request.id, false, 'This bridge requires a newer version of HashPulse.');
+        }
+        if (Math.abs(Date.now() / 1000 - Number(request.issuedAt)) > ACTION_FRESHNESS_SEC) {
+          return createResponse(request.id, false, 'Request expired.');
+        }
+      }
+
+      // Replay: ChaChaPoly gives integrity, not freshness — the relay can
+      // duplicate frames verbatim. A request id may only ever execute once.
+      if (!this._registerRequestID(request.id)) {
+        console.warn(`[MinerProxy] Rejected duplicate request id ${request.id}`);
+        return createResponse(request.id, false, 'Duplicate request.');
+      }
+
       switch (request.type) {
         case RequestType.LIST_MINERS:
           return createMinerListResponse(request.id, this.scanner.miners);
@@ -419,9 +566,45 @@ class MinerProxy {
     }
   }
 
+  // Insert a request id into the seen-cache. Returns false if it was already
+  // present (duplicate). Prunes expired entries and caps the map size.
+  _registerRequestID(id) {
+    const now = Date.now();
+    for (const [key, firstSeen] of this._seenIDs) {
+      if (now - firstSeen > SEEN_ID_TTL_MS) this._seenIDs.delete(key);
+      else break; // Map preserves insertion order; first live entry ends the sweep.
+    }
+    if (this._seenIDs.has(id)) return false;
+    this._seenIDs.set(id, now);
+    if (this._seenIDs.size > SEEN_ID_MAX) {
+      const oldest = this._seenIDs.keys().next().value;
+      this._seenIDs.delete(oldest);
+    }
+    return true;
+  }
+
+  // Layer B — the target must be a miner this bridge's scanner actually
+  // discovered. One rescan retry covers a stale cache before rejecting.
+  //
+  // Matching is on IP ONLY — deliberately NOT on port. The scanner probes
+  // cgminer on 4028 only, so an Avalon Nano 3S running on :4029 (a supported
+  // multi-miner setup) could never appear in the cache with that port; an
+  // IP+port match would make those devices permanently unreachable. The port is
+  // constrained independently by Layer A's structural allowlist ({80,443,4028,
+  // 4029}). Do NOT "tighten" this to include the port.
+  async _ensureDiscoveredMiner(host) {
+    const known = (miners) => miners.some((m) => m.ip === host);
+    if (known(this.scanner.miners)) return;
+    await this.scanner.scan();
+    if (known(this.scanner.miners)) return;
+    throw new Error('Target is not a miner discovered by this bridge.');
+  }
+
   async _handleMinerStatus(request) {
+    if (!request.target) return createResponse(request.id, false, 'No target IP');
+    const { host } = validateTarget(request.target);
+    await this._ensureDiscoveredMiner(host);
     const ip = request.target;
-    if (!ip) return createResponse(request.id, false, 'No target IP');
     const protocol = request.minerProtocol || 'bitaxeHTTP';
     if (protocol === 'bitaxeHTTP') {
       const raw = await fetchBitAxeStatus(ip);
@@ -432,14 +615,17 @@ class MinerProxy {
   }
 
   async _handleMinerAction(request) {
-    const ip = request.target;
-    if (!ip) return createResponse(request.id, false, 'No target IP');
+    if (!request.target) return createResponse(request.id, false, 'No target IP');
     const action = request.action;
     if (!action) return createResponse(request.id, false, 'No action specified');
+    const { host } = validateTarget(request.target);
+    await this._ensureDiscoveredMiner(host);
+    const ip = request.target;
     const params = request.parameters || {};
+    const body = request.body ? Buffer.from(request.body, 'base64') : null;
     const protocol = request.minerProtocol || 'bitaxeHTTP';
     if (protocol === 'bitaxeHTTP') {
-      await sendBitAxeAction(ip, action, params);
+      await forwardBitAxeAction(ip, action, params, body);
       return createMinerActionResponse(request.id, true, null);
     }
     if (protocol === 'antminerCGI') {
@@ -462,6 +648,7 @@ class MinerProxy {
       uptime: (Date.now() - this.startTime) / 1000,
       minerCount: this.scanner.miners.length,
       hostname: os.hostname(),
+      minAppVersion: MIN_APP_VERSION,
     });
   }
 }
@@ -474,7 +661,11 @@ module.exports = {
   fetchCGMinerStatus,
   splitHostPort,
   forwardCGMinerAction,
+  forwardBitAxeAction,
   sendAntminerPoolConfig,
   parseDigestChallenge,
   buildDigestAuthHeader,
+  validateTarget,
+  validateFreeform,
+  requireInt,
 };

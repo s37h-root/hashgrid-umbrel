@@ -16,7 +16,14 @@ function createServer(bridgeManager) {
       minerCount: bridgeManager.scanner.miners.length,
       subnet: bridgeManager.scanner.getSubnet(),
       uptime: (Date.now() - bridgeManager.startTime) / 1000,
+      // Ephemeral (per-session) fingerprint — kept for backwards-compat/debug.
       fingerprint: bridgeManager.relay ? bridgeManager.relay.fingerprint : null,
+      // Persistent 48-bit identity fingerprint the iOS app pins (TOFU). Stable
+      // across restarts — this is the one users verify.
+      identityFingerprint: bridgeManager.identityFingerprint,
+      paired: bridgeManager.pairedAppKey != null,
+      pairingModeActive: bridgeManager.pairingModeActive,
+      lastUnknownDeviceAttempt: bridgeManager.lastUnknownDeviceAttempt,
     });
   });
 
@@ -31,6 +38,13 @@ function createServer(bridgeManager) {
   app.post('/api/code/regenerate', (req, res) => {
     bridgeManager.regenerateCode();
     res.json({ code: bridgeManager.code });
+  });
+
+  // Headless pairing-mode control. Opening this window lets a NEW phone's key
+  // pin without rotating the code (auto-closes after 10 min or on first pin).
+  app.post('/api/pairing/enter', (req, res) => {
+    bridgeManager.enterPairingMode();
+    res.json({ pairingModeActive: bridgeManager.pairingModeActive });
   });
 
   // Umbrel dashboard widget endpoint

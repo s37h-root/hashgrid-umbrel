@@ -85,6 +85,10 @@ function createBridgeInfoResponse(id, info) {
         uptime: info.uptime,
         minerCount: info.minerCount,
         hostname: info.hostname || null,
+        // Minimum app compatibility version this bridge speaks. iOS surfaces an
+        // "update your app" banner when its compatibility number is lower. This
+        // is how legacy apps (which can't send issuedAt) get told to update.
+        minAppVersion: info.minAppVersion || null,
       },
     },
   };

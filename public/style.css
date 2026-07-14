@@ -96,11 +96,44 @@ header h1 {
   border-color: #34d399;
 }
 
+.fingerprint-label {
+  display: block;
+  margin-top: 14px;
+  font-size: 10px;
+}
+
 .fingerprint {
-  font-size: 12px;
-  color: #666;
-  margin-top: 8px;
+  font-size: 13px;
+  color: #a5b4fc;
+  margin-top: 4px;
   font-family: 'SF Mono', 'Fira Code', monospace;
+  letter-spacing: 1px;
+}
+
+.pairing-banner {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.warning-banner {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
 }
 
 .status-section {

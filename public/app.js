@@ -13,6 +13,9 @@
   const subnetInput = document.getElementById('subnet-input');
   const subnetSave = document.getElementById('subnet-save');
   const regenerateBtn = document.getElementById('regenerate-btn');
+  const pairBtn = document.getElementById('pair-btn');
+  const pairingBanner = document.getElementById('pairing-banner');
+  const unknownBanner = document.getElementById('unknown-banner');
 
   function escapeHTML(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -47,7 +50,22 @@
       const code = await codeRes.json();
 
       codeEl.textContent = code.code;
-      fingerprintEl.textContent = status.fingerprint || '';
+      // Show the persistent identity fingerprint — the value the app pins/verifies.
+      fingerprintEl.textContent = status.identityFingerprint || status.fingerprint || '';
+
+      if (status.pairingModeActive) {
+        pairingBanner.hidden = false;
+        pairingBanner.textContent = 'Pairing mode active — a new device can pair for 10 minutes.';
+      } else {
+        pairingBanner.hidden = true;
+      }
+
+      if (status.lastUnknownDeviceAttempt) {
+        unknownBanner.hidden = false;
+        unknownBanner.textContent = 'An unknown device tried to connect and was blocked. If this was you, tap "Pair New Device".';
+      } else {
+        unknownBanner.hidden = true;
+      }
 
       relayDot.className = 'status-dot ' + (STATE_COLORS[status.state] || 'red');
       relayStatus.textContent = STATE_LABELS[status.state] || status.state;
@@ -91,6 +109,11 @@
   regenerateBtn.addEventListener('click', async function () {
     if (!confirm('Generate a new pairing code? You will need to re-pair in the HashGrid app.')) return;
     await fetch('/api/code/regenerate', { method: 'POST' });
+    refresh();
+  });
+
+  pairBtn.addEventListener('click', async function () {
+    await fetch('/api/pairing/enter', { method: 'POST' });
     refresh();
   });
 
