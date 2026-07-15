@@ -445,15 +445,56 @@ function fetchBitAxeStatus(target) {
 async function fetchCGMinerStatus(ip) {
   const commands = ['summary', 'devs', 'pools', 'version', 'stats'];
   const result = {};
+  const raw = {};
   for (const cmd of commands) {
     try {
       const response = await sendCGMinerCommand(ip, { command: cmd });
       result[cmd] = Buffer.from(response).toString('base64');
+      raw[cmd] = response;
     } catch {
       if (cmd !== 'stats') { result[cmd] = ''; }
     }
   }
+
+  // Avalon Q failover: its primary `stats` response can carry an empty
+  // "MM ID0" (cold start), which the app parses to nil stats. Mirror the iOS
+  // LAN ladder bridge-side: when stats has no usable MM ID0 on a non-Antminer
+  // device, run estats (then litestats) and attach the raw responses as extra
+  // envelope fields for the app's failover parser. Skipped for Antminers and
+  // healthy Avalons — normal poll cost unchanged.
+  if (needsAvalonStatsFailover(raw.stats, raw.version)) {
+    for (const cmd of ['estats', 'litestats']) {
+      try {
+        const response = await sendCGMinerCommand(ip, { command: cmd });
+        result[cmd] = Buffer.from(response).toString('base64');
+        // The app's failover parser needs a non-empty "MM ID0:Summary";
+        // stop the ladder once one is in hand.
+        if (hasUsableMMIDSummary(response)) { break; }
+      } catch {
+        // Try the next failover command.
+      }
+    }
+  }
+
   return result;
+}
+
+// True when the primary `stats` blob would parse to nil Avalon stats on iOS
+// (no non-empty "MM ID0"/"MM ID0:Summary" value). Antminers (BMMiner field /
+// "antminer" in version) never need the Avalon ladder.
+function needsAvalonStatsFailover(stats, version) {
+  if (version) {
+    const vText = version.toString('utf8');
+    if (vText.includes('BMMiner') || vText.toLowerCase().includes('antminer')) { return false; }
+  }
+  if (!stats) { return true; }
+  return !/"MM ID0(:Summary)?" *: *"[^"]/.test(stats.toString('utf8'));
+}
+
+// Non-empty "MM ID0:Summary" — the specific field the app's estats/litestats
+// failover parser requires.
+function hasUsableMMIDSummary(data) {
+  return /"MM ID0:Summary" *: *"[^"]/.test(data.toString('utf8'));
 }
 
 // Layer C — FIXED action map. The action string is NEVER interpolated into the
