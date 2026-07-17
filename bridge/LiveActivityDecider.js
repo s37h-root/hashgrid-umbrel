@@ -41,7 +41,7 @@ function createDecider(opts = {}) {
       reason = withinCap ? 'delta-ratecapped' : 'delta';
       if (priority === 10) lastHiPriMs = nowMs;
     }
-    lastPushed = fleet;
+    lastPushed = { ...fleet }; // defensive copy — don't alias a caller-reused fleet object
     lastPushMs = nowMs;
     return { push: true, priority, reason };
   }

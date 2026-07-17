@@ -1,9 +1,12 @@
 'use strict';
 
 const { MinerScanner } = require('./MinerScanner');
-const { MinerProxy } = require('./MinerProxy');
+const { MinerProxy, fetchBitAxeStatus, fetchCGMinerStatus } = require('./MinerProxy');
 const { RelayClient, generatePairingCode } = require('./RelayClient');
 const crypto = require('./BridgeCrypto');
+const { parseMinerStats } = require('./LiveActivityStats');
+const { createDecider } = require('./LiveActivityDecider');
+const { createLiveActivityPusher } = require('./LiveActivityPusher');
 const {
   loadPairingCode,
   savePairingCode,
@@ -11,10 +14,14 @@ const {
   savePairedAppKey,
   clearPairedAppKey,
   loadSettings,
+  loadActivityState,
+  saveActivityState,
 } = require('./persistence');
 
 // How long a New-Code / Pair-New-Device window stays open before auto-closing.
 const PAIRING_MODE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
+// Cadence for the autonomous Live Activity poll/push loop (Phase 2).
+const LIVE_ACTIVITY_TICK_MS = 45_000;
 
 class BridgeManager {
   constructor() {
@@ -35,6 +42,10 @@ class BridgeManager {
     this.pairingModeActive = false;
     this.lastUnknownDeviceAttempt = null;
     this._pairingModeTimer = null;
+
+    // Phase 2: autonomous Live Activity poll/push loop.
+    this.pusher = null;
+    this._liveActivityTimer = null;
   }
 
   get identityFingerprint() { return this.identity.fingerprint; }
@@ -55,8 +66,37 @@ class BridgeManager {
     this.scanner.start();
     console.log(`[Bridge] Scanning subnet: ${this.scanner.getSubnet() || 'none detected'}`);
     this._connectRelay();
+    this._startLiveActivityLoop();
     console.log(`[Bridge] Started with code: ${this.code}`);
     console.log(`[Bridge] Identity fingerprint: ${this.identityFingerprint}`);
+  }
+
+  // MARK: - Live Activity poll/push loop (Phase 2)
+
+  _startLiveActivityLoop() {
+    this.pusher = createLiveActivityPusher({
+      getMiners: () => this.scanner.miners,
+      // One unreachable miner must not blank the whole fleet's Live Activity —
+      // Promise.all in the pusher would otherwise reject the entire tick.
+      // Report it as offline instead, matching parseMinerStats' own failure shape.
+      fetchStats: async (m) => {
+        try {
+          const raw = m.minerProtocol === 'bitaxeHTTP' ? await fetchBitAxeStatus(m.ip) : await fetchCGMinerStatus(m.ip);
+          return parseMinerStats(m.minerProtocol, raw);
+        } catch {
+          return { online: false, hashrateGH: 0, tempC: null };
+        }
+      },
+      decider: createDecider(),
+      sendPush: (obj) => { if (this.relay) this.relay.sendLiveActivityPush(obj); },
+      getActivityState: () => loadActivityState(),
+      now: () => Date.now(),
+    });
+    if (this._liveActivityTimer) clearInterval(this._liveActivityTimer);
+    this._liveActivityTimer = setInterval(() => {
+      this.pusher.tick().catch((err) => console.error('[Bridge] Live Activity tick error:', err.message));
+    }, LIVE_ACTIVITY_TICK_MS);
+    if (this._liveActivityTimer.unref) this._liveActivityTimer.unref();
   }
 
   // "New Code" / "Pair New Device": rotate the code AND open the pairing window
@@ -73,6 +113,7 @@ class BridgeManager {
   stop() {
     this.scanner.stop();
     if (this._pairingModeTimer) { clearTimeout(this._pairingModeTimer); this._pairingModeTimer = null; }
+    if (this._liveActivityTimer) { clearInterval(this._liveActivityTimer); this._liveActivityTimer = null; }
     if (this.relay) { this.relay.disconnect(); this.relay = null; }
   }
 
@@ -173,6 +214,10 @@ class BridgeManager {
         return response;
       },
       onUnpaired: () => this._completeUnpair(),
+      onLiveActivityControl: (ctl) => {
+        saveActivityState({ active: !!ctl.active, enabled: !!ctl.enabled, activityId: ctl.activityId ?? null });
+        console.log(`[Bridge] Live Activity control: enabled=${!!ctl.enabled} active=${!!ctl.active}`);
+      },
     });
     this.relay.connect();
   }

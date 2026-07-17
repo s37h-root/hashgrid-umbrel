@@ -2,7 +2,7 @@
 
 const WebSocket = require('ws');
 const crypto = require('./BridgeCrypto');
-const { EnvelopeType, createEnvelope, parseEnvelope } = require('./BridgeProtocol');
+const { EnvelopeType, createEnvelope, parseEnvelope, createLiveActivityPushEnvelope } = require('./BridgeProtocol');
 
 const RELAY_URL = 'wss://hashgrid-relay.root373.workers.dev';
 const PING_INTERVAL_MS = 30_000;
@@ -82,6 +82,14 @@ class RelayClient {
     this.ws.send(JSON.stringify(envelope));
   }
 
+  // Live Activity pushes are plaintext (relay-terminated, not app-E2E) —
+  // mirrors the _sendPong pattern. No-op if the socket isn't open yet.
+  sendLiveActivityPush(pushObj) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(createLiveActivityPushEnvelope(pushObj)));
+    }
+  }
+
   _handleMessage(rawMessage) {
     let envelope;
     try { envelope = parseEnvelope(rawMessage); } catch { return; }
@@ -106,6 +114,13 @@ class RelayClient {
           this.keyPair = crypto.generateKeyPair();
           this._setState(ConnectionState.WAITING_FOR_PEER);
         }
+        break;
+      }
+      case EnvelopeType.LIVE_ACTIVITY_CONTROL: {
+        try {
+          const ctl = JSON.parse(Buffer.from(envelope.payload, 'base64').toString('utf8'));
+          if (this.callbacks.onLiveActivityControl) this.callbacks.onLiveActivityControl(ctl);
+        } catch { /* ignore malformed */ }
         break;
       }
       default: break;
