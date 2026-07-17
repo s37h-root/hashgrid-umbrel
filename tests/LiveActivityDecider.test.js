@@ -24,7 +24,10 @@ describe('LiveActivityDecider', () => {
   });
 
   it('rate-caps: a second delta within 60s downgrades to priority-5', () => {
-    const d = createDecider();
+    // minPushIntervalMs disabled here so the pri-10->pri-5 rate-cap-downgrade
+    // path can be exercised in isolation from the global min-interval floor
+    // (see the dedicated min-interval-floor tests below).
+    const d = createDecider({ hiPriMinIntervalMs: 60_000, minPushIntervalMs: 0 });
     d.decide(fleet(), 0);                                   // pri-10 @0
     const r = d.decide(fleet({ offlineCount: 1, onlineCount: 2 }), 30_000); // within 60s
     assert.equal(r.push, true);
@@ -45,5 +48,22 @@ describe('LiveActivityDecider', () => {
     d.decide(fleet({ totalHashrateGH: 1000 }), 0);
     const r = d.decide(fleet({ totalHashrateGH: 1050 }), 120_000); // +5% < 10%
     assert.equal(r.push, false);
+  });
+
+  it('suppresses a flapping delta that arrives before the global min-push-interval floor', () => {
+    const d = createDecider();
+    d.decide(fleet(), 0); // pri-10 @0, lastPushMs=0
+    const suppressed = d.decide(fleet({ onlineCount: 2, offlineCount: 1 }), 60_000); // delta, but <120s since last push
+    assert.equal(suppressed.push, false);
+    assert.equal(suppressed.reason, 'delta-suppressed-min-interval');
+  });
+
+  it('fires the same delta once the global min-push-interval floor has elapsed', () => {
+    const d = createDecider();
+    d.decide(fleet(), 0); // pri-10 @0, lastPushMs=0
+    const suppressed = d.decide(fleet({ onlineCount: 2, offlineCount: 1 }), 60_000); // suppressed, lastPushMs unchanged
+    assert.equal(suppressed.push, false);
+    const fired = d.decide(fleet({ onlineCount: 2, offlineCount: 1 }), 130_000); // >=120s since last push
+    assert.equal(fired.push, true);
   });
 });

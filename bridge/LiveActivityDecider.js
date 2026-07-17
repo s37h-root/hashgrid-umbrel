@@ -8,6 +8,7 @@ const DEFAULTS = {
   hashrateSwingPct: 0.10,     // >10% total-hashrate change is a delta
   hiPriMinIntervalMs: 60_000, // <=1 priority-10 push per 60s
   heartbeatMs: 12 * 60 * 1000,
+  minPushIntervalMs: 120_000, // global floor between delta pushes (heartbeats exempt)
 };
 
 function _isDelta(prev, curr, swingPct) {
@@ -32,6 +33,13 @@ function createDecider(opts = {}) {
     const heartbeatDue = nowMs - lastPushMs >= cfg.heartbeatMs;
 
     if (!delta && !heartbeatDue) return { push: false, priority: 5, reason: 'no-change' };
+
+    // Coalesce flapping: suppress a delta-only push that arrives sooner than the
+    // global floor. Heartbeats are exempt. lastPushed stays stale so the change
+    // is re-evaluated (and pushed as net state) once the floor elapses.
+    if (delta && !heartbeatDue && nowMs - lastPushMs < cfg.minPushIntervalMs) {
+      return { push: false, priority: 5, reason: 'delta-suppressed-min-interval' };
+    }
 
     let priority = 5;
     let reason = 'heartbeat';

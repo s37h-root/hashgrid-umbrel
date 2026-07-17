@@ -10,7 +10,7 @@ const { aggregateFleet, buildContentState } = require('./LiveActivityStats');
 
 const SPARKLINE_MAX = 40;
 
-function createLiveActivityPusher({ getMiners, fetchStats, decider, sendPush, getActivityState, now }) {
+function createLiveActivityPusher({ getMiners, fetchStats, decider, sendPush, getActivityState, setActivityState, now }) {
   const sparkline = [];
 
   async function tick() {
@@ -39,6 +39,11 @@ function createLiveActivityPusher({ getMiners, fetchStats, decider, sendPush, ge
         attributes: { fleetName: 'HashPulse' },
         alert: { title: 'Fleet monitoring', body: 'Live Activity started' },
       });
+      // Optimistically mark active so a closed app (which cannot send an
+      // inbound liveActivityControl frame) doesn't cause this tick to
+      // push:'start' again next cycle, stacking duplicate activities. The
+      // app's later inbound control frame still corrects activityId/state.
+      if (setActivityState) setActivityState({ enabled: state.enabled, active: true, activityId: null });
     } else {
       sendPush({
         event: 'update',

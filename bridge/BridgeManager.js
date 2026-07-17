@@ -46,6 +46,7 @@ class BridgeManager {
     // Phase 2: autonomous Live Activity poll/push loop.
     this.pusher = null;
     this._liveActivityTimer = null;
+    this._liveActivityTicking = false;
   }
 
   get identityFingerprint() { return this.identity.fingerprint; }
@@ -90,11 +91,18 @@ class BridgeManager {
       decider: createDecider(),
       sendPush: (obj) => { if (this.relay) this.relay.sendLiveActivityPush(obj); },
       getActivityState: () => loadActivityState(),
+      setActivityState: (s) => saveActivityState(s),
       now: () => Date.now(),
     });
     if (this._liveActivityTimer) clearInterval(this._liveActivityTimer);
     this._liveActivityTimer = setInterval(() => {
-      this.pusher.tick().catch((err) => console.error('[Bridge] Live Activity tick error:', err.message));
+      // Re-entrancy guard: a slow tick (network stalls) must not overlap with
+      // the next 45s firing.
+      if (this._liveActivityTicking) return;
+      this._liveActivityTicking = true;
+      (async () => {
+        await this.pusher.tick().catch((err) => console.error('[Bridge] Live Activity tick error:', err.message));
+      })().finally(() => { this._liveActivityTicking = false; });
     }, LIVE_ACTIVITY_TICK_MS);
     if (this._liveActivityTimer.unref) this._liveActivityTimer.unref();
   }
@@ -176,6 +184,7 @@ class BridgeManager {
     clearPairedAppKey();
     this.code = generatePairingCode();
     savePairingCode(this.code);
+    saveActivityState({ enabled: false, active: false, activityId: null });
     console.log('[Bridge] Unpair: cleared paired app key and rotated pairing code');
   }
 
