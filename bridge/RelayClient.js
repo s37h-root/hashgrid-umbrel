@@ -1,6 +1,11 @@
 'use strict';
 
 const WebSocket = require('ws');
+const tls = require('tls');
+// Aliased: `crypto` below is already taken by the app-layer ./BridgeCrypto
+// module (pairing/session encryption). This is Node's builtin, used only for
+// the relay TLS cert pin's SPKI hash.
+const nodeCrypto = require('node:crypto');
 const crypto = require('./BridgeCrypto');
 const { EnvelopeType, createEnvelope, parseEnvelope, createLiveActivityPushEnvelope } = require('./BridgeProtocol');
 
@@ -10,6 +15,21 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 // Explicit inbound frame cap so a hostile relay can't OOM the bridge with one
 // giant frame. Matches the mac/Windows bridges (10 MiB).
 const MAX_FRAME_BYTES = 10 * 1024 * 1024;
+
+// SPKI SHA-256 pins for hashgrid-relay.root373.workers.dev (Cloudflare). Include
+// a backup pin. Populate these from the live cert before enabling enforcement.
+const PINNED_SPKI_SHA256 = [ /* 'base64pin1=', 'base64pin2=' */ ];
+
+function pinnedCheck(host, cert) {
+  const err = tls.checkServerIdentity(host, cert); // still verify hostname/chain
+  if (err) return err;
+  if (PINNED_SPKI_SHA256.length === 0) return undefined; // not yet populated → chain-only
+  const spki = nodeCrypto.createHash('sha256').update(cert.pubkey).digest('base64');
+  if (!PINNED_SPKI_SHA256.includes(spki)) {
+    return new Error('relay certificate SPKI pin mismatch');
+  }
+  return undefined;
+}
 
 const PAIRING_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -54,7 +74,7 @@ class RelayClient {
     if (this._closed) return;
     this._setState(ConnectionState.CONNECTING);
     const url = `${RELAY_URL}/room/${this.code}?role=bridge`;
-    this.ws = new WebSocket(url, { maxPayload: MAX_FRAME_BYTES });
+    this.ws = new WebSocket(url, { maxPayload: MAX_FRAME_BYTES, checkServerIdentity: pinnedCheck });
 
     this.ws.on('open', () => {
       this._reconnectAttempt = 0;
