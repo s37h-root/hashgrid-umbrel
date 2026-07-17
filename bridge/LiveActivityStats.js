@@ -45,4 +45,44 @@ function parseMinerStats(minerProtocol, raw) {
   return { online: false, hashrateGH: 0, tempC: null };
 }
 
-module.exports = { parseMinerStats };
+const APPLE_EPOCH_OFFSET = 978307200; // seconds between 1970-01-01 and 2001-01-01
+const HIGH_TEMP_C = 75;
+
+function aggregateFleet(perMinerStats) {
+  let totalHashrateGH = 0, onlineCount = 0, standbyCount = 0, offlineCount = 0;
+  let tempSum = 0, tempN = 0;
+  for (const m of perMinerStats) {
+    if (!m.online) { offlineCount++; continue; }
+    totalHashrateGH += m.hashrateGH;
+    if (m.hashrateGH > 0) {
+      onlineCount++;
+      if (typeof m.tempC === 'number') { tempSum += m.tempC; tempN++; }
+    } else { standbyCount++; }
+  }
+  const avgTemperatureC = tempN > 0 ? tempSum / tempN : 0;
+  return {
+    totalHashrateGH, onlineCount, standbyCount, offlineCount,
+    avgTemperatureC, isHighTemperature: avgTemperatureC >= HIGH_TEMP_C,
+  };
+}
+
+function formatHashrate(gh) {
+  if (gh >= 1000) return `${(gh / 1000).toFixed(2)} TH/s`;
+  return `${Math.round(gh)} GH/s`;
+}
+
+function buildContentState(fleet, sparklineSamples, nowMs) {
+  return {
+    totalHashrateGH: fleet.totalHashrateGH,
+    hashrateDisplay: formatHashrate(fleet.totalHashrateGH),
+    onlineCount: fleet.onlineCount,
+    standbyCount: fleet.standbyCount,
+    offlineCount: fleet.offlineCount,
+    avgTemperatureC: fleet.avgTemperatureC,
+    isHighTemperature: fleet.isHighTemperature,
+    sparklineSamples: sparklineSamples.slice(-20),
+    lastUpdated: Math.floor(nowMs / 1000) - APPLE_EPOCH_OFFSET,
+  };
+}
+
+module.exports = { parseMinerStats, aggregateFleet, formatHashrate, buildContentState };

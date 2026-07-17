@@ -42,3 +42,47 @@ describe('parseMinerStats', () => {
     assert.ok(Math.abs(s.hashrateGH - 500) < 0.001); // 500000 MH/s = 500 GH/s
   });
 });
+
+const { aggregateFleet, formatHashrate, buildContentState } = require('../bridge/LiveActivityStats');
+
+describe('aggregateFleet', () => {
+  it('counts online/standby/offline and averages temp over hashing miners', () => {
+    const f = aggregateFleet([
+      { online: true, hashrateGH: 500, tempC: 60 },
+      { online: true, hashrateGH: 0, tempC: 30 },     // standby
+      { online: false, hashrateGH: 0, tempC: null },  // offline
+      { online: true, hashrateGH: 1500, tempC: 80 },
+    ]);
+    assert.equal(f.onlineCount, 2);
+    assert.equal(f.standbyCount, 1);
+    assert.equal(f.offlineCount, 1);
+    assert.equal(f.totalHashrateGH, 2000);
+    assert.equal(f.avgTemperatureC, 70); // (60+80)/2, standby/offline excluded
+    assert.equal(f.isHighTemperature, false);
+  });
+
+  it('flags high temperature at/above 75', () => {
+    const f = aggregateFleet([{ online: true, hashrateGH: 100, tempC: 78 }]);
+    assert.equal(f.isHighTemperature, true);
+  });
+});
+
+describe('formatHashrate', () => {
+  it('scales to TH/s above 1000 GH', () => { assert.equal(formatHashrate(1230), '1.23 TH/s'); });
+  it('shows GH/s below 1000', () => { assert.equal(formatHashrate(485), '485 GH/s'); });
+});
+
+describe('buildContentState', () => {
+  it('emits exact iOS keys and Apple-reference-date lastUpdated', () => {
+    const fleet = { totalHashrateGH: 2000, onlineCount: 2, standbyCount: 0, offlineCount: 0, avgTemperatureC: 70, isHighTemperature: false };
+    const cs = buildContentState(fleet, [1, 2, 3], 1_700_000_000_000);
+    assert.deepEqual(Object.keys(cs).sort(), [
+      'avgTemperatureC','hashrateDisplay','isHighTemperature','lastUpdated',
+      'offlineCount','onlineCount','sparklineSamples','standbyCount','totalHashrateGH',
+    ]);
+    assert.equal(cs.totalHashrateGH, 2000);
+    assert.equal(cs.hashrateDisplay, '2.00 TH/s');
+    assert.equal(cs.lastUpdated, 1_700_000_000 - 978307200); // seconds since 2001
+    assert.deepEqual(cs.sparklineSamples, [1, 2, 3]);
+  });
+});
