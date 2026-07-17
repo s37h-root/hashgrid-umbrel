@@ -51,7 +51,11 @@
 
       codeEl.textContent = code.code;
       // Show the persistent identity fingerprint — the value the app pins/verifies.
-      fingerprintEl.textContent = status.identityFingerprint || status.fingerprint || '';
+      // Uppercased to match how the iOS app renders it (RemotePairingView shows
+      // `fingerprint.uppercased()`), so the two read identically when the user
+      // compares them side by side. Display-only: the raw lowercase hex is still
+      // what's compared over the wire, so this must NOT touch the crypto layer.
+      fingerprintEl.textContent = (status.identityFingerprint || status.fingerprint || '').toUpperCase();
 
       if (status.pairingModeActive) {
         pairingBanner.hidden = false;
