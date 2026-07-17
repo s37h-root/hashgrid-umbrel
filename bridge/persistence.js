@@ -101,6 +101,21 @@ function saveSettings(settings) {
   fs.writeFileSync(file, JSON.stringify(settings, null, 2));
 }
 
+// activityState.json tracks the bridge's view of the iOS Live Activity
+// lifecycle (Phase 2 push seam): whether the user has enabled it, whether one
+// is currently active on the relay/device, and its activityId for targeting
+// pushes. Read-modify-write like the pairing store above.
+const ACTIVITY_FILE = path.join(DATA_DIR, 'activityState.json');
+
+function loadActivityState() {
+  try { return JSON.parse(fs.readFileSync(ACTIVITY_FILE, 'utf8')); }
+  catch { return { active: false, enabled: false, activityId: null, updatedAt: 0 }; }
+}
+function saveActivityState(state) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(ACTIVITY_FILE, JSON.stringify({ ...state, updatedAt: Date.now() }));
+}
+
 module.exports = {
   loadPairingCode,
   savePairingCode,
@@ -111,4 +126,6 @@ module.exports = {
   saveIdentityDER,
   loadSettings,
   saveSettings,
+  loadActivityState,
+  saveActivityState,
 };

@@ -7,6 +7,8 @@ const EnvelopeType = {
   PONG: 'pong',
   BRIDGE_STATUS: 'bridgeStatus',
   APP_STATUS: 'appStatus',
+  LIVE_ACTIVITY_CONTROL: 'liveActivityControl',
+  LIVE_ACTIVITY_PUSH: 'liveActivityPush',
 };
 
 const RequestType = {
@@ -32,6 +34,11 @@ function createEnvelope(type, payloadBuffer) {
 
 function parseEnvelope(jsonString) {
   return JSON.parse(jsonString);
+}
+
+function createLiveActivityPushEnvelope(pushObj) {
+  const payload = Buffer.from(JSON.stringify(pushObj), 'utf8');
+  return createEnvelope(EnvelopeType.LIVE_ACTIVITY_PUSH, payload);
 }
 
 function createResponse(id, success, error) {
@@ -100,6 +107,7 @@ module.exports = {
   MinerProtocolType,
   createEnvelope,
   parseEnvelope,
+  createLiveActivityPushEnvelope,
   createResponse,
   createMinerListResponse,
   createMinerStatusResponse,
