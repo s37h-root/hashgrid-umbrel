@@ -28,7 +28,7 @@ describe('LiveActivityPusher', () => {
     await p.tick();
     assert.equal(sent.length, 1);
     assert.equal(sent[0].event, 'start');
-    assert.equal(sent[0].attributes.fleetName, 'HashPulse');
+    assert.equal(sent[0].attributes.fleetName, 'HashGrid');
   });
 
   it('optimistically marks active:true after a successful start push, so a closed app does not repeat start forever', async () => {

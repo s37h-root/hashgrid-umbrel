@@ -36,7 +36,7 @@ function createLiveActivityPusher({ getMiners, fetchStats, decider, sendPush, ge
         contentState: cs,
         staleDate: null,
         attributesType: 'MiningActivityAttributes',
-        attributes: { fleetName: 'HashPulse' },
+        attributes: { fleetName: 'HashGrid' },
         alert: { title: 'Fleet monitoring', body: 'Live Activity started' },
       });
       // Optimistically mark active so a closed app (which cannot send an
