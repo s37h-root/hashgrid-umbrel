@@ -574,7 +574,7 @@ class MinerProxy {
       // apps without issuedAt keep monitoring.
       if (request.type === RequestType.MINER_ACTION) {
         if (request.issuedAt === undefined || request.issuedAt === null) {
-          return createResponse(request.id, false, 'This bridge requires a newer version of HashPulse.');
+          return createResponse(request.id, false, 'This bridge requires a newer version of HashGrid.');
         }
         if (Math.abs(Date.now() / 1000 - Number(request.issuedAt)) > ACTION_FRESHNESS_SEC) {
           return createResponse(request.id, false, 'Request expired.');
