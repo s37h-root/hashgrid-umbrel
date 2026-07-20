@@ -21,6 +21,19 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // Shared-secret token that authenticates this UI to the control API. It is
+  // handed out only over loopback (this page is served through Umbrel's proxy,
+  // so /api/session sees a loopback peer), and attached as X-Auth-Token on every
+  // control request below. Fetched once at startup before anything else runs.
+  let AUTH_TOKEN = null;
+
+  function authedFetch(url, opts) {
+    const options = opts || {};
+    const headers = Object.assign({}, options.headers);
+    if (AUTH_TOKEN) headers['X-Auth-Token'] = AUTH_TOKEN;
+    return fetch(url, Object.assign({}, options, { headers: headers }));
+  }
+
   const STATE_LABELS = {
     disconnected: 'Disconnected',
     connecting: 'Connecting...',
@@ -40,9 +53,9 @@
   async function refresh() {
     try {
       const [statusRes, minersRes, codeRes] = await Promise.all([
-        fetch('/api/status'),
-        fetch('/api/miners'),
-        fetch('/api/code'),
+        authedFetch('/api/status'),
+        authedFetch('/api/miners'),
+        authedFetch('/api/code'),
       ]);
 
       const status = await statusRes.json();
@@ -112,18 +125,18 @@
 
   regenerateBtn.addEventListener('click', async function () {
     if (!confirm('Generate a new pairing code? You will need to re-pair in the HashGrid app.')) return;
-    await fetch('/api/code/regenerate', { method: 'POST' });
+    await authedFetch('/api/code/regenerate', { method: 'POST' });
     refresh();
   });
 
   pairBtn.addEventListener('click', async function () {
-    await fetch('/api/pairing/enter', { method: 'POST' });
+    await authedFetch('/api/pairing/enter', { method: 'POST' });
     refresh();
   });
 
   subnetSave.addEventListener('click', async function () {
     const value = subnetInput.value.trim();
-    await fetch('/api/settings', {
+    await authedFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customSubnet: value || null }),
@@ -132,12 +145,24 @@
     refresh();
   });
 
-  fetch('/api/settings')
-    .then(function (res) { return res.json(); })
-    .then(function (s) {
-      if (s.customSubnet) subnetInput.value = s.customSubnet;
-    });
+  // Bootstrap: obtain the auth token first, then load settings and start the
+  // refresh loop. Everything else depends on the token being present.
+  async function init() {
+    try {
+      const res = await fetch('/api/session');
+      if (res.ok) AUTH_TOKEN = (await res.json()).token;
+    } catch (err) {
+      console.error('Session bootstrap failed:', err);
+    }
 
-  refresh();
-  setInterval(refresh, 3000);
+    try {
+      const s = await (await authedFetch('/api/settings')).json();
+      if (s.customSubnet) subnetInput.value = s.customSubnet;
+    } catch (err) { /* non-fatal */ }
+
+    refresh();
+    setInterval(refresh, 3000);
+  }
+
+  init();
 })();
