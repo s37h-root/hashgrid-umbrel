@@ -2,12 +2,29 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const nodeCrypto = require('node:crypto');
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 
+// The data dir holds the Ed25519 identity private key and the web-UI auth
+// token, so it must not be readable by other local users. We tighten it to
+// 0700 once per process (a guard avoids spamming the log if the underlying
+// volume — e.g. an Umbrel bind mount — refuses chmod).
+let _dirHardened = false;
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  }
+  if (!_dirHardened) {
+    _dirHardened = true;
+    try {
+      fs.chmodSync(DATA_DIR, 0o700);
+    } catch (err) {
+      console.error(
+        `[persistence] SECURITY WARNING: could not restrict ${DATA_DIR} to 0700 (${err.message}); ` +
+        'the identity private key may be readable by other local users.'
+      );
+    }
   }
 }
 
@@ -82,7 +99,50 @@ function saveIdentityDER(derBuffer) {
     JSON.stringify({ privateKeyDER: Buffer.from(derBuffer).toString('base64'), createdAt: new Date().toISOString() }),
     { mode: 0o600 }
   );
-  try { fs.chmodSync(file, 0o600); } catch { /* best-effort owner-only perms */ }
+  // NON-silent 0600 enforcement: an Ed25519 private key readable by other local
+  // users would let them impersonate this bridge's pinned identity. There is no
+  // OS keystore on Umbrel, so 0600 owner-only perms are the strongest at-rest
+  // protection available — verify they actually landed and shout if they didn't.
+  try { fs.chmodSync(file, 0o600); } catch (err) {
+    console.error(`[persistence] SECURITY WARNING: could not chmod identity key to 0600 (${err.message}).`);
+  }
+  try {
+    const mode = fs.statSync(file).mode & 0o777;
+    if (mode !== 0o600) {
+      console.error(
+        `[persistence] SECURITY WARNING: identity key ${file} has mode ${mode.toString(8)} (expected 600); ` +
+        'the private key may be readable by other local users.'
+      );
+    }
+  } catch (err) {
+    console.error(`[persistence] SECURITY WARNING: could not verify identity key permissions (${err.message}).`);
+  }
+}
+
+// Shared-secret token that authenticates the local web UI to the control API.
+// Generated once on first boot and reused across restarts. Stored 0600 in the
+// same locked-down data dir as the identity key. This is what stops a
+// LAN-adjacent host from driving the unauthenticated control API (the bridge
+// listens on the host network under Umbrel).
+function loadOrCreateAuthToken() {
+  ensureDataDir();
+  const file = path.join(DATA_DIR, 'session.json');
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (data && typeof data.authToken === 'string' && data.authToken.length >= 32) {
+      return data.authToken;
+    }
+  } catch { /* fall through and mint a fresh token */ }
+  const token = nodeCrypto.randomBytes(32).toString('hex');
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ authToken: token, createdAt: new Date().toISOString() }),
+    { mode: 0o600 }
+  );
+  try { fs.chmodSync(file, 0o600); } catch (err) {
+    console.error(`[persistence] SECURITY WARNING: could not chmod ${file} to 0600 (${err.message}).`);
+  }
+  return token;
 }
 
 function loadSettings() {
@@ -124,6 +184,7 @@ module.exports = {
   clearPairedAppKey,
   loadIdentityDER,
   saveIdentityDER,
+  loadOrCreateAuthToken,
   loadSettings,
   saveSettings,
   loadActivityState,
