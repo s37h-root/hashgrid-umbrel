@@ -5,16 +5,42 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { loadOrCreateAuthToken } = require('./persistence');
 
-// Loopback peers only. Under Umbrel the app runs with `network_mode: host` and
-// is reached through Umbrel's authenticated app-proxy, which connects over
-// localhost — so a loopback TCP peer is the proxy (already user-authenticated),
-// while a non-loopback peer is a LAN-adjacent host hitting the port directly.
-// We read the raw socket address (NOT X-Forwarded-For, which a client can
-// spoof) so this cannot be forged from off-host.
-function isLoopback(req) {
-  const addr = req.socket && req.socket.remoteAddress;
+// Normalize a raw socket peer address: strip the IPv4-mapped IPv6 prefix so
+// `::ffff:172.18.0.5` compares as the plain IPv4 `172.18.0.5`.
+function normalizeAddr(addr) {
+  if (!addr) return '';
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(addr);
+  return mapped ? mapped[1] : addr;
+}
+
+// Trusted bootstrap origin for the token/widget endpoints. We read the RAW
+// socket address (NOT X-Forwarded-For, which a client can spoof) so this
+// cannot be forged from off-host.
+//
+// The app runs `network_mode: host`, but Umbrel injects a BRIDGE-networked
+// app_proxy that reaches this host-network app from a docker-subnet IP (e.g.
+// `::ffff:172.x` / `10.21.x`), NOT loopback. So loopback-only would 403 the
+// legitimate proxy and leave the UI with no token → every control route 401s →
+// dead UI. We therefore accept loopback PLUS the RFC1918 ranges Docker uses for
+// its bridge networks: 10.0.0.0/8 and 172.16.0.0/12. We deliberately EXCLUDE
+// 192.168.0.0/16 (the common home-LAN range) so a typical LAN attacker still
+// cannot fetch the token.
+//
+// HEURISTIC — MUST be confirmed on a live Umbrel: if the UI still 403s, add the
+// proxy's actual observed source subnet here; if it works, consider tightening
+// to that exact subnet. This only governs where the TOKEN can be bootstrapped;
+// the control routes stay gated on the auth token regardless.
+function isTrustedOrigin(req) {
+  const addr = normalizeAddr(req.socket && req.socket.remoteAddress);
   if (!addr) return false;
-  return addr === '::1' || addr === '::ffff:127.0.0.1' || addr.startsWith('127.');
+  if (addr === '::1' || addr.startsWith('127.')) return true; // loopback (127/8, ::1)
+  if (addr.startsWith('10.')) return true;                    // 10.0.0.0/8
+  const m = /^172\.(\d+)\./.exec(addr);                       // 172.16.0.0/12
+  if (m) {
+    const second = Number(m[1]);
+    if (second >= 16 && second <= 31) return true;
+  }
+  return false; // 192.168.0.0/16 and everything else rejected
 }
 
 function extractToken(req) {
@@ -55,10 +81,11 @@ function createServer(bridgeManager) {
     next();
   }
 
-  // Loopback-only gate for endpoints that must reach the trusted proxy but
-  // never a LAN host (the token bootstrap and the code-bearing widget feed).
+  // Origin gate for endpoints that must reach the trusted Umbrel proxy but never
+  // a LAN host (the token bootstrap and the code-bearing widget feed). Accepts
+  // loopback + docker-bridge ranges; see isTrustedOrigin for the rationale.
   function requireLoopback(req, res, next) {
-    if (!isLoopback(req)) {
+    if (!isTrustedOrigin(req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     next();
@@ -75,6 +102,9 @@ function createServer(bridgeManager) {
 
   app.get('/api/status', requireAuth, (req, res) => {
     res.json({
+      // Single source of truth for the version banner (package.json). Baked into
+      // the image at build time; the UI reads this so it never drifts.
+      version: require('../package.json').version,
       state: bridgeManager.state,
       peerConnected: bridgeManager.peerConnected,
       connectedDevice: bridgeManager.connectedDevice,

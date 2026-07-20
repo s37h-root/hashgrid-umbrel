@@ -16,7 +16,7 @@ const CGMINER_PORT = 4028;
 const CGMINER_TIMEOUT_MS = 3_000;
 const BITAXE_STATUS_TIMEOUT_MS = 5_000;
 const ANTMINER_TIMEOUT_MS = 10_000;
-const BRIDGE_VERSION = '1.0.6';
+const BRIDGE_VERSION = require('../package.json').version;
 const BRIDGE_PLATFORM = 'umbrel';
 // App compatibility version the bridge requires (advertised in bridgeInfo).
 // Legacy apps that can't send `issuedAt` get told to update via this gate.

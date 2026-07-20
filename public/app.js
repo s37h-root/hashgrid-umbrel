@@ -16,6 +16,7 @@
   const pairBtn = document.getElementById('pair-btn');
   const pairingBanner = document.getElementById('pairing-banner');
   const unknownBanner = document.getElementById('unknown-banner');
+  const versionEl = document.getElementById('version');
 
   function escapeHTML(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -61,6 +62,10 @@
       const status = await statusRes.json();
       const miners = await minersRes.json();
       const code = await codeRes.json();
+
+      // Version banner is served from package.json via /api/status so it can't
+      // drift from the running build.
+      if (versionEl && status.version) versionEl.textContent = 'v' + status.version;
 
       codeEl.textContent = code.code;
       // Show the persistent identity fingerprint — the value the app pins/verifies.
