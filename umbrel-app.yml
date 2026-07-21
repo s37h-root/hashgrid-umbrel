@@ -2,7 +2,7 @@ manifestVersion: 1
 id: hashgrid-bridge
 category: bitcoin
 name: HashGrid Bridge
-version: "1.0.7"
+version: "1.0.8"
 tagline: Remote miner monitoring bridge for the HashGrid iOS app
 description: >-
   HashGrid Bridge connects your local Bitcoin miners to the HashGrid iOS app
