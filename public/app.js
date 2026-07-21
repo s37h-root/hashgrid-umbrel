@@ -102,7 +102,11 @@
 
       minerCount.textContent = miners.length;
       if (miners.length === 0) {
-        minersList.innerHTML = '<div class="empty-state">No miners found on ' + escapeHTML(status.subnet || 'network') + '</div>';
+        // Auto-detect is gone (bridge runs on the docker network, not host), so
+        // the user must supply the subnet. Guide them when none is set / nothing found.
+        minersList.innerHTML = status.subnet
+          ? '<div class="empty-state">No miners found on ' + escapeHTML(status.subnet) + '</div>'
+          : '<div class="empty-state">Enter your network\'s first 3 octets (e.g. 192.168.1) in Settings to scan for miners.</div>';
       } else {
         minersList.innerHTML = miners
           .map(function (m) {

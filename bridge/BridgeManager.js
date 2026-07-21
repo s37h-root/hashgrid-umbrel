@@ -65,7 +65,7 @@ class BridgeManager {
       this.scanner.setCustomSubnet(settings.customSubnet);
     }
     this.scanner.start();
-    console.log(`[Bridge] Scanning subnet: ${this.scanner.getSubnet() || 'none detected'}`);
+    console.log(`[Bridge] Scanning subnet: ${this.scanner.getSubnet() || 'none set — enter it in Settings (bridge net has no LAN auto-detect)'}`);
     this._connectRelay();
     this._startLiveActivityLoop();
     console.log(`[Bridge] Started with code: ${this.code}`);

@@ -54,10 +54,13 @@ function extractToken(req) {
 function createServer(bridgeManager) {
   const app = express();
 
-  // The auth token is the load-bearing control-API defense: without it, any
-  // LAN-adjacent host could POST /api/pairing/enter + GET /api/code, join the
-  // relay room and repoint miners (reward theft). Generated + persisted once on
-  // first boot; the legitimate UI fetches it from the loopback-only /api/session.
+  // The REAL auth boundary is now Umbrel's app-proxy. The bridge no longer runs
+  // `network_mode: host`; it sits on the docker bridge network, so :3000 is not
+  // exposed on the LAN at all — the only path to the control UI is through
+  // Umbrel's authenticated app-proxy. That closes the LAN-auth hole cleanly and
+  // makes this app-level token redundant, so it ships OPT-IN OFF (see below).
+  // Kept (not removed) as defense-in-depth / a seam for non-Umbrel deployments.
+  // Generated + persisted once on first boot; the UI fetches it from /api/session.
   const AUTH_TOKEN = loadOrCreateAuthToken();
   const AUTH_TOKEN_BUF = Buffer.from(AUTH_TOKEN);
 
