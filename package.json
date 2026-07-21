@@ -1,6 +1,6 @@
 {
   "name": "hashgrid-bridge-umbrel",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "HashGrid Bridge for Umbrel — remote miner monitoring",
   "main": "bridge/index.js",
   "scripts": {
