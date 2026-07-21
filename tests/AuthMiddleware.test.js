@@ -10,6 +10,8 @@ const fs = require('node:fs');
 // set BEFORE requiring the server (persistence captures DATA_DIR at load).
 const TMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'hg-auth-'));
 process.env.DATA_DIR = TMP_DATA;
+// Auth is opt-in (default off); this suite exercises the enforced path.
+process.env.BRIDGE_AUTH_ENABLED = 'true';
 
 const { createServer } = require('../bridge/server');
 

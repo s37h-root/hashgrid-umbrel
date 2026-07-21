@@ -61,6 +61,15 @@ function createServer(bridgeManager) {
   const AUTH_TOKEN = loadOrCreateAuthToken();
   const AUTH_TOKEN_BUF = Buffer.from(AUTH_TOKEN);
 
+  // Auth is OPT-IN (default OFF). Under `network_mode: host` the Umbrel app-proxy
+  // and a LAN host can share the same subnet, so IP-based origin gating cannot
+  // reliably distinguish them — enabling it 403'd the legitimate UI on real Umbrel
+  // hardware (v1.0.8). Ship disabled until a proxy-safe mechanism is confirmed
+  // (loopback bind + separate scanner, or a verified proxy subnet). The rejected
+  // origin is logged below so the real proxy IP can be identified before enabling.
+  // Set BRIDGE_AUTH_ENABLED=true to enforce.
+  const AUTH_ENABLED = process.env.BRIDGE_AUTH_ENABLED === 'true';
+
   function tokenMatches(provided) {
     if (typeof provided !== 'string') return false;
     const buf = Buffer.from(provided);
@@ -75,6 +84,7 @@ function createServer(bridgeManager) {
   // defense: a cross-origin <form> POST cannot set X-Auth-Token without a CORS
   // preflight, and the browser will never attach the token for another origin.
   function requireAuth(req, res, next) {
+    if (!AUTH_ENABLED) return next();
     if (!tokenMatches(extractToken(req))) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -85,7 +95,12 @@ function createServer(bridgeManager) {
   // a LAN host (the token bootstrap and the code-bearing widget feed). Accepts
   // loopback + docker-bridge ranges; see isTrustedOrigin for the rationale.
   function requireLoopback(req, res, next) {
+    if (!AUTH_ENABLED) return next();
     if (!isTrustedOrigin(req)) {
+      // Log the actual source so the trusted proxy subnet can be identified from
+      // `docker logs` before enabling auth on a live Umbrel.
+      console.warn('[auth] rejected token-bootstrap from',
+        normalizeAddr(req.socket && req.socket.remoteAddress));
       return res.status(403).json({ error: 'Forbidden' });
     }
     next();
