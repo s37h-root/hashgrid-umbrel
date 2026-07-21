@@ -125,11 +125,7 @@ class MinerScanner {
   }
 
   setCustomSubnet(prefix) { this.customSubnet = prefix || null; }
-  // Auto-detect is DELIBERATELY disabled: the bridge now runs on Umbrel's docker
-  // bridge network (not host), so detectSubnet() would return the container's
-  // docker subnet (e.g. 172.18.x) — never the real LAN. The user must set the
-  // subnet manually in Settings; scanning is manual-subnet-only.
-  getSubnet() { return this.customSubnet || null; }
+  getSubnet() { return this.customSubnet || detectSubnet(); }
 
   async scan() {
     if (this._scanning) return;

@@ -50,6 +50,25 @@ update.
 - **Replay & SSRF protection**: Duplicate/stale commands are rejected, and the
   bridge only talks to private-network miners it actually discovered.
 
+### Network trust model (design decision)
+
+The bridge runs with `network_mode: host` so it can auto-detect your LAN and scan
+for miners with **zero configuration** — this is deliberate and is what makes the
+app "just work." A consequence is that the local control panel (port 3000) is
+reachable by any device **already on your home network**, the same trust boundary
+as your router's admin page or the Umbrel dashboard itself.
+
+An app-level auth token exists in the code (`BRIDGE_AUTH_ENABLED`, default **off**)
+as defense-in-depth for non-Umbrel deployments. It ships disabled on Umbrel because
+the only ways to gate the LAN port either (a) require the user to hand-enter their
+subnet (moving off host networking), or (b) rely on an IP-origin heuristic that has
+repeatedly broken the control UI on real hardware. The residual exposure is narrow:
+hijacking a paired setup is blocked by **app-key pinning + the TOFU identity
+fingerprint**, so an attacker would need a malicious device on your Wi-Fi *and* an
+unpaired/pairing window. We accept this LAN-trust model rather than risk a broken
+admin panel. **Do not "fix" this by removing host networking without also solving
+zero-config subnet detection** — see the project memory for the v1.0.8/v1.0.10 post-mortems.
+
 ## Configuration
 
 - **Custom Subnet**: If your miners are on a different subnet than your Umbrel, enter the subnet prefix (e.g., `192.168.2`) in Settings
