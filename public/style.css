@@ -1,61 +1,134 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* HashGrid Bridge — themed to match the HashGrid iOS app (default "aurora" theme).
+   Brand tokens lifted from ThemeManager.aurora + ColorPalette so the bridge panel
+   reads as the same product as the phone app. */
+:root {
+  --bg-top: #1A2634;       /* backgroundTop */
+  --bg-bottom: #0F1724;    /* backgroundBottom */
+  --card-top: #243447;     /* cardBackgroundTop / midnightSlate */
+  --card-bottom: #1A2634;  /* cardBackgroundBottom / deepCharcoal */
+  --accent: #64FFDA;       /* softMintTeal */
+  --accent-2: #2DD4BF;     /* secondaryAccent */
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8; /* mistGrey / Slate 400 */
+  --success: #34D399;
+  --warning: #FBBF24;
+  --error: #FB7185;
+  --stroke: rgba(255, 255, 255, 0.10);  /* surfaceStroke */
+  --fill: rgba(255, 255, 255, 0.05);    /* surfaceFill */
+
+  /* Device-type badge colors — match DiscoveredDeviceSelectionView.badgeColor
+     (the app's discovery categories). */
+  --type-bitaxe: #64FFDA;     /* softMintTeal — BitAxe */
+  --type-nerdaxe: #FF6482;    /* pink — NerdQAxe */
+  --type-gammaturbo: #4DA3FF; /* blue — GammaTurbo */
+  --type-hammer: #E8956D;     /* dogeGold — Hammer Miner */
+  --type-cgminer: #BFBFBF;    /* avalonGrey — Avalon / Canaan / Antminer */
+
+  --radius-card: 16px;
+  --radius-panel: 22px;
 }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: rgba(0, 0, 0, 0.6);
-  color: #e0e0e0;
+  color: var(--text-primary);
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 20px;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(100, 255, 218, 0.06), transparent 60%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  background-attachment: fixed;
 }
 
+/* Outer panel — the "dashboard": gradient background + the app's signature grid
+   backdrop (24px, fading in toward the top), with cards floating on top. */
 .container {
-  max-width: 420px;
+  position: relative;
+  max-width: 430px;
   width: 100%;
-  background: #1a1a2e;
-  border-radius: 20px;
-  padding: 28px 24px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  max-height: 90vh;
+  border-radius: var(--radius-panel);
+  padding: 26px 22px;
+  max-height: 94vh;
   overflow-y: auto;
+  isolation: isolate;
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
+.container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-mask-image: linear-gradient(to top, transparent 10%, rgba(0, 0, 0, 0.9) 100%);
+  mask-image: linear-gradient(to top, transparent 10%, rgba(0, 0, 0, 0.9) 100%);
+  pointer-events: none;
+}
+
+/* Header */
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
+  padding: 0 2px;
 }
 
 header h1 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
-.version {
-  font-size: 12px;
-  color: #666;
+/* Brand mark: a small mint-teal grid glyph echoing "HashGrid". */
+.brand-mark {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  background:
+    linear-gradient(rgba(15, 23, 36, 0.9) 1.5px, transparent 1.5px) 0 0 / 5px 5px,
+    linear-gradient(90deg, rgba(15, 23, 36, 0.9) 1.5px, transparent 1.5px) 0 0 / 5px 5px,
+    linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
+  flex-shrink: 0;
 }
 
-.code-section {
-  background: #16213e;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 16px;
-  text-align: center;
+.version { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* Card surface shared by every section */
+.code-section,
+.status-section,
+.miners-section,
+.settings-section {
+  background: linear-gradient(180deg, var(--card-top) 0%, var(--card-bottom) 100%);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-card);
+  margin-bottom: 14px;
 }
+
+/* Pairing code card */
+.code-section { padding: 20px; text-align: center; }
 
 .code-section label {
-  font-size: 12px;
-  color: #888;
+  font-size: 11px;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  font-weight: 600;
 }
 
 .code-display {
@@ -63,262 +136,268 @@ header h1 {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 #pairing-code {
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 700;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  letter-spacing: 4px;
-  color: #fff;
+  font-family: 'SF Mono', ui-monospace, 'Fira Code', monospace;
+  letter-spacing: 6px;
+  color: var(--text-primary);
+  text-shadow: 0 0 18px rgba(100, 255, 218, 0.18);
 }
 
 .icon-btn {
-  background: none;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: #888;
+  background: var(--fill);
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px;
+  padding: 7px;
   display: flex;
   align-items: center;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.icon-btn:hover {
-  color: #fff;
-  border-color: #555;
-}
-
-.icon-btn.copied {
-  color: #34d399;
-  border-color: #34d399;
-}
+.icon-btn:hover { color: var(--accent); border-color: rgba(100, 255, 218, 0.5); }
+.icon-btn.copied { color: var(--accent); border-color: var(--accent); background: rgba(100, 255, 218, 0.12); }
 
 .fingerprint-label {
   display: block;
-  margin-top: 14px;
+  margin-top: 16px;
   font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 600;
 }
 
 .fingerprint {
-  font-size: 13px;
-  color: #a5b4fc;
-  margin-top: 4px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  letter-spacing: 1px;
+  font-size: 14px;
+  color: var(--accent);
+  margin-top: 5px;
+  font-family: 'SF Mono', ui-monospace, 'Fira Code', monospace;
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.pairing-banner,
+.warning-banner {
+  margin-top: 14px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
 }
 
 .pairing-banner {
-  margin-top: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12px;
   background: rgba(52, 211, 153, 0.12);
   color: #6ee7b7;
-  border: 1px solid rgba(52, 211, 153, 0.3);
+  border: 1px solid rgba(52, 211, 153, 0.32);
 }
 
 .warning-banner {
-  margin-top: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(251, 113, 133, 0.12);
+  color: #fda4af;
+  border: 1px solid rgba(251, 113, 133, 0.32);
 }
 
-.actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.status-section {
-  background: #16213e;
-  border-radius: 12px;
-  padding: 14px 20px;
-  margin-bottom: 16px;
-}
+/* Status card */
+.status-section { padding: 14px 18px; }
 
 .status-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 0;
+  padding: 5px 0;
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #666;
+  background: var(--text-secondary);
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
 }
 
-.status-dot.green { background: #34d399; }
-.status-dot.yellow { background: #fbbf24; }
+.status-dot.green { background: var(--success); box-shadow: 0 0 8px rgba(52, 211, 153, 0.6); }
+.status-dot.yellow { background: var(--warning); box-shadow: 0 0 8px rgba(251, 191, 36, 0.55); }
 .status-dot.orange { background: #f97316; }
-.status-dot.red { background: #ef4444; }
+.status-dot.red { background: var(--error); }
 
-.miners-section {
-  background: #16213e;
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-}
+/* Section headings (Miners / Settings) */
+.miners-section,
+.settings-section { padding: 16px 18px; }
 
-.miners-section h2 {
-  font-size: 14px;
-  font-weight: 600;
+.miners-section h2,
+.settings-section h2 {
+  font-size: 15px;
+  font-weight: 700;
   margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
+  color: var(--text-primary);
 }
 
 .miner-count {
-  background: #0f3460;
-  color: #888;
+  background: rgba(100, 255, 218, 0.14);
+  color: var(--accent);
   font-size: 12px;
-  padding: 2px 8px;
+  font-weight: 700;
+  padding: 1px 9px;
   border-radius: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
-.miners-list {
-  max-height: 200px;
-  overflow-y: auto;
-}
+.miners-list { max-height: 240px; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
 
+/* Miner row — mirrors the app's discovered-device row (SwarmDeviceRow):
+   model name + type capsule on top, IP in mint-teal mono below. */
 .miner-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #1a1a2e;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.miner-item:last-child {
-  border-bottom: none;
+.miner-item:last-child { border-bottom: none; }
+
+.miner-main { min-width: 0; }
+
+.miner-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.miner-ip {
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  color: #ccc;
-}
-
-.miner-model {
-  font-size: 12px;
-  color: #888;
-}
-
-.miner-protocol {
-  font-size: 11px;
-  color: #555;
-  background: #0f3460;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.empty-state {
-  color: #555;
-  font-size: 13px;
-  text-align: center;
-  padding: 16px 0;
-}
-
-.settings-section {
-  background: #16213e;
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-}
-
-.settings-section h2 {
+/* IP is the primary identifier on the row (matches the app's discovery list),
+   with the hostname beneath it. */
+.miner-ip-primary {
+  font-family: 'SF Mono', ui-monospace, 'Fira Code', monospace;
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 12px;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
 }
 
+.miner-host {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+/* Device-type capsule — Capsule().fill(color.opacity(0.2)) + bold color text */
+.type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+
+.type-bitaxe     { color: var(--type-bitaxe);     background: rgba(100, 255, 218, 0.18); }
+.type-nerdaxe    { color: var(--type-nerdaxe);    background: rgba(255, 100, 130, 0.18); }
+.type-gammaturbo { color: var(--type-gammaturbo); background: rgba(77, 163, 255, 0.18); }
+.type-hammer     { color: var(--type-hammer);     background: rgba(232, 149, 109, 0.18); }
+.type-cgminer    { color: var(--type-cgminer);    background: rgba(191, 191, 191, 0.16); }
+
+.empty-state {
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px 0;
+}
+
+/* Settings */
 .setting-row label {
   font-size: 12px;
-  color: #888;
+  color: var(--text-secondary);
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
+  font-weight: 500;
 }
 
-.input-group {
-  display: flex;
-  gap: 8px;
-}
+.input-group { display: flex; gap: 8px; }
 
 .input-group input {
   flex: 1;
-  background: #0f3460;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: #e0e0e0;
-  padding: 8px 12px;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--stroke);
+  border-radius: 9px;
+  color: var(--text-primary);
+  padding: 9px 12px;
   font-size: 13px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: 'SF Mono', ui-monospace, 'Fira Code', monospace;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.input-group input::placeholder {
-  color: #555;
-}
+.input-group input::placeholder { color: var(--text-secondary); opacity: 0.7; }
 
 .input-group input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(100, 255, 218, 0.12);
 }
 
+/* Primary (accent) button — teal fill, dark text, matching the app's accent
+   buttons (foregroundColor(.deepCharcoal) on accent). */
 .btn-small {
-  background: #3b82f6;
-  color: #fff;
+  background: var(--accent);
+  color: var(--bg-bottom);
   border: none;
-  border-radius: 6px;
-  padding: 8px 14px;
+  border-radius: 9px;
+  padding: 9px 16px;
   font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: filter 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 16px rgba(100, 255, 218, 0.22);
 }
 
-.btn-small:hover {
-  background: #2563eb;
-}
+.btn-small:hover { filter: brightness(1.08); box-shadow: 0 0 22px rgba(100, 255, 218, 0.35); }
 
+/* Secondary actions */
 .actions {
-  text-align: center;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 2px;
 }
 
 .btn-secondary {
-  background: none;
-  color: #888;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 10px 20px;
+  flex: 1;
+  background: var(--fill);
+  color: var(--text-secondary);
+  border: 1px solid var(--stroke);
+  border-radius: 11px;
+  padding: 11px 16px;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
 .btn-secondary:hover {
-  color: #fff;
-  border-color: #555;
+  color: var(--accent);
+  border-color: rgba(100, 255, 218, 0.45);
+  background: rgba(100, 255, 218, 0.06);
 }
 
-.miners-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.miners-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.miners-list::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 2px;
-}
+/* Scrollbars */
+.miners-list::-webkit-scrollbar,
+.container::-webkit-scrollbar { width: 5px; }
+.miners-list::-webkit-scrollbar-track,
+.container::-webkit-scrollbar-track { background: transparent; }
+.miners-list::-webkit-scrollbar-thumb,
+.container::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }

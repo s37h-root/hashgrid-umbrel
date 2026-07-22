@@ -32,11 +32,47 @@ function isPrivate172(ip) {
   return second >= 16 && second <= 31;
 }
 
+// Format a BitAxe-family device's friendly product name EXACTLY as the HashGrid
+// app does at discovery (NetworkManager+Discovery.formatBitaxeHardwareType): use
+// an explicit device model if the firmware reports one, else map boardVersion to
+// a board name, then apply the brand prefix / Hammer / NerdQAxe handling — so the
+// bridge's labels read identically to the app's discovery badges ("Bitaxe Gamma",
+// "GammaTurbo", "NerdQAxe++", "Hammer Miner", ...).
+function formatBitaxeHardwareType(data) {
+  // Mirror MinerApiResponse.deviceModel derivation (first non-empty of these).
+  let model = data.deviceModel || data.device_model || data.model || data.DeviceModel || data.product || null;
+  if (model === '' || model === 'N/A') model = null;
+
+  // Fallback: infer the board model from boardVersion (BitAxe-specific).
+  if (model == null && data.boardVersion != null) {
+    const b = String(data.boardVersion);
+    if (b.startsWith('80') || b.includes('800') || b.includes('801') || b.includes('802') || b.includes('803')) model = 'GammaTurbo';
+    else if (b.startsWith('70') || b.includes('700') || b.includes('701')) model = 'Supra';
+    else if (b.startsWith('60') || b.includes('601') || b.includes('602') || b.includes('603')) model = 'Gamma';
+    else if (b.startsWith('40') || b.includes('401')) model = 'Ultra';
+    else if (b.startsWith('20') || b.includes('204')) model = 'Max';
+    else if (b.startsWith('30') || b.includes('303')) model = 'Hex';
+  }
+
+  if (model != null) {
+    const lm = model.toLowerCase();
+    if (lm.startsWith('dc0')) return 'Hammer Miner';                          // Hammer (DC02/DC04/DC06)
+    if (lm.includes('bitaxe') || lm.includes('nerd') || lm.includes('qaxe')) return model; // already branded
+    return 'Bitaxe ' + model;                                                // standard BitAxe boards
+  }
+
+  return data.hostname || null;
+}
+
 function parseBitAxeInfo(data) {
-  if (data.ASICModel) return { deviceModel: data.ASICModel, hostname: data.hostname || null };
-  if (data.boardVersion) return { deviceModel: data.boardVersion, hostname: data.hostname || null };
-  if (data.hashRate != null && data.freeHeap != null) return { deviceModel: 'BitAxe', hostname: data.hostname || null };
-  return null;
+  // Confirm it's a BitAxe-family (ESP-Miner) device before labeling it.
+  const looksBitaxe = data.ASICModel || data.boardVersion != null ||
+    (data.hashRate != null && data.freeHeap != null);
+  if (!looksBitaxe) return null;
+  return {
+    deviceModel: formatBitaxeHardwareType(data) || 'BitAxe',
+    hostname: data.hostname || null,
+  };
 }
 
 function parseCGMinerVersion(data) {

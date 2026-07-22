@@ -22,6 +22,23 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // Assign a device-type badge using the SAME logic the HashGrid app applies on
+  // discovery (DiscoveredDeviceSelectionView.badgeColor): the label is the
+  // friendly product name the scanner already resolved (Bitaxe Gamma, NerdQAxe++,
+  // Hammer Miner, Avalon Nano 3S, ...) and the color is category-based, checked in
+  // the app's exact order.
+  function deviceType(m) {
+    var label = m.deviceModel || 'Unknown';
+    var p = label.toLowerCase();
+    var cls;
+    if (p.indexOf('hammer') !== -1) cls = 'type-hammer';                    // Hammer Miner -> Dogecoin gold
+    else if (m.minerProtocol === 'cgminerTCP') cls = 'type-cgminer';        // Avalon/Canaan/Antminer -> grey
+    else if (p.indexOf('nerd') !== -1 || p.indexOf('qaxe') !== -1) cls = 'type-nerdaxe';        // NerdQAxe -> pink
+    else if (p.indexOf('gammaturbo') !== -1 || p.indexOf('gamma turbo') !== -1) cls = 'type-gammaturbo'; // GammaTurbo -> blue
+    else cls = 'type-bitaxe';                                               // BitAxe -> teal
+    return { label: label, cls: cls };
+  }
+
   // Shared-secret token that authenticates this UI to the control API. It is
   // handed out only over loopback (this page is served through Umbrel's proxy,
   // so /api/session sees a loopback peer), and attached as X-Auth-Token on every
@@ -106,11 +123,19 @@
       } else {
         minersList.innerHTML = miners
           .map(function (m) {
+            var t = deviceType(m);
+            var host = m.hostname
+              ? '<div class="miner-host">' + escapeHTML(m.hostname) + '</div>'
+              : '';
             return (
               '<div class="miner-item">' +
-              '<div><div class="miner-ip">' + escapeHTML(m.ip) + '</div>' +
-              '<div class="miner-model">' + escapeHTML(m.deviceModel || 'Unknown') + '</div></div>' +
-              '<span class="miner-protocol">' + (m.minerProtocol === 'bitaxeHTTP' ? 'BitAxe' : 'CGMiner') + '</span>' +
+              '<div class="miner-main">' +
+              '<div class="miner-name-row">' +
+              '<span class="miner-ip-primary">' + escapeHTML(m.ip) + '</span>' +
+              '<span class="type-badge ' + t.cls + '">' + escapeHTML(t.label) + '</span>' +
+              '</div>' +
+              host +
+              '</div>' +
               '</div>'
             );
           })
