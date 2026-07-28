@@ -1,0 +1,31 @@
+name: Test
+
+# docker-publish.yml only runs on a v* tag, so these tests had never run in CI.
+# That is how two stale parseBitAxeInfo assertions stayed red from 9028cb5 until
+# a1760df. This suite is also the only executable spec of protocol/crypto
+# behaviour shared with the macOS and Windows bridges — worth keeping green.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node 20 to match the node:20-alpine image this bridge actually ships in
+      # (see Dockerfile), not whatever the dev machine happens to run.
+      - name: Setup Node 20
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
