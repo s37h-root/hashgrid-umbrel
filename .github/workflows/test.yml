@@ -9,8 +9,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel a run that a newer push to the same branch has superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    # A same-repo PR fires push AND pull_request for the same commit. The push
+    # run already covers it, so skip the duplicate. Fork PRs produce no push
+    # event here, so they still run.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
